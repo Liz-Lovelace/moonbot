@@ -21,11 +21,24 @@ async function getTickerPrice(symbol) {
     try {
         const quote = await yahooFinance.quote(symbol);
         
+        // Calculate percentage change
+        const previousClose = quote.regularMarketPreviousClose;
+        const currentPrice = quote.regularMarketPrice;
+        const changePercent = previousClose 
+            ? ((currentPrice - previousClose) / previousClose * 100).toFixed(2)
+            : 'N/A';
+        
+        // Add + sign for positive changes
+        const formattedChange = changePercent === 'N/A' 
+            ? changePercent 
+            : `${Number(changePercent) > 0 ? '+' : ''}${changePercent}%`;
+        
         const result = {
             symbol: symbol.toUpperCase(),
-            regularMarketPrice: quote.regularMarketPrice,
+            regularMarketPrice: currentPrice,
             preMarketPrice: quote.preMarketPrice || 'N/A',
             postMarketPrice: quote.postMarketPrice || 'N/A',
+            changePercent: formattedChange,
             timestamp: new Date().toISOString()
         };
         
@@ -42,8 +55,28 @@ async function getTickerPrice(symbol) {
     }
 }
 
+function getChangeEmoji(changePercent) {
+    if (changePercent === 'N/A') return '';
+    return changePercent.startsWith('+') ? '🟩 ' : '🟥 ';
+}
+
 function formatPriceMessage(data) {
-    return `**${data.symbol}**\nPrice: ${data.regularMarketPrice}\nPre-market: ${data.preMarketPrice}\nPost-market: ${data.postMarketPrice}`;
+    const emoji = getChangeEmoji(data.changePercent);
+    const lines = [
+        `**${data.symbol}**`,
+        `Price: ${data.regularMarketPrice}`,
+        `Change: ${emoji}${data.changePercent}`
+    ];
+
+    if (data.preMarketPrice !== 'N/A') {
+        lines.push(`Pre-market: ${data.preMarketPrice}`);
+    }
+    
+    if (data.postMarketPrice !== 'N/A') {
+        lines.push(`Post-market: ${data.postMarketPrice}`);
+    }
+
+    return lines.join('\n');
 }
 
 function formatHistoryMessage() {
@@ -53,7 +86,10 @@ function formatHistoryMessage() {
     
     return "Last 10 requests:\n\n" + [...requestHistory]
         .reverse()
-        .map(data => `**${data.symbol}** ${data.regularMarketPrice} / pre ${data.preMarketPrice} / post ${data.postMarketPrice}`)
+        .map(data => {
+            const emoji = getChangeEmoji(data.changePercent);
+            return `**${data.symbol}** ${emoji} ${data.regularMarketPrice} (${data.changePercent}) / pre ${data.preMarketPrice} / post ${data.postMarketPrice}`;
+        })
         .join('\n');
 }
 
