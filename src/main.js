@@ -21,28 +21,30 @@ async function getTickerPrice(symbol) {
     try {
         const quote = await yahooFinance.quote(symbol);
         
-        // Calculate percentage change
         const previousClose = quote.regularMarketPreviousClose;
         const currentPrice = quote.regularMarketPrice;
-        const changePercent = previousClose 
-            ? ((currentPrice - previousClose) / previousClose * 100).toFixed(2)
-            : 'N/A';
         
-        // Add + sign for positive changes
-        const formattedChange = changePercent === 'N/A' 
-            ? changePercent 
-            : `${Number(changePercent) > 0 ? '+' : ''}${changePercent}%`;
+        function calculateChange(price) {
+            if (!price || !previousClose) return 'N/A';
+            const change = ((price - previousClose) / previousClose * 100).toFixed(2);
+            return `${Number(change) > 0 ? '+' : ''}${change}%`;
+        }
+        
+        const regularChange = calculateChange(currentPrice);
+        const preMarketChange = calculateChange(quote.preMarketPrice);
+        const postMarketChange = calculateChange(quote.postMarketPrice);
         
         const result = {
             symbol: symbol.toUpperCase(),
             regularMarketPrice: currentPrice,
             preMarketPrice: quote.preMarketPrice || 'N/A',
             postMarketPrice: quote.postMarketPrice || 'N/A',
-            changePercent: formattedChange,
+            changePercent: regularChange,
+            preMarketChange: preMarketChange,
+            postMarketChange: postMarketChange,
             timestamp: new Date().toISOString()
         };
         
-        // Add to history
         requestHistory.unshift(result);
         if (requestHistory.length > MAX_HISTORY) {
             requestHistory.pop();
@@ -61,19 +63,21 @@ function getChangeEmoji(changePercent) {
 }
 
 function formatPriceMessage(data) {
-    const emoji = getChangeEmoji(data.changePercent);
+    const regularEmoji = getChangeEmoji(data.changePercent);
+    const preEmoji = getChangeEmoji(data.preMarketChange);
+    const postEmoji = getChangeEmoji(data.postMarketChange);
+    
     const lines = [
         `**${data.symbol}**`,
-        `Price: ${data.regularMarketPrice}`,
-        `Change: ${emoji}${data.changePercent}`
+        `Price: ${data.regularMarketPrice} ${regularEmoji}${data.changePercent}`
     ];
 
     if (data.preMarketPrice !== 'N/A') {
-        lines.push(`Pre-market: ${data.preMarketPrice}`);
+        lines.push(`Pre-market: ${data.preMarketPrice} ${preEmoji}${data.preMarketChange}`);
     }
     
     if (data.postMarketPrice !== 'N/A') {
-        lines.push(`Post-market: ${data.postMarketPrice}`);
+        lines.push(`Post-market: ${data.postMarketPrice} ${postEmoji}${data.postMarketChange}`);
     }
 
     return lines.join('\n');
@@ -87,8 +91,13 @@ function formatHistoryMessage() {
     return "Last 10 requests:\n\n" + [...requestHistory]
         .reverse()
         .map(data => {
-            const emoji = getChangeEmoji(data.changePercent);
-            return `**${data.symbol}** ${emoji} ${data.regularMarketPrice} (${data.changePercent}) / pre ${data.preMarketPrice} / post ${data.postMarketPrice}`;
+            const regularEmoji = getChangeEmoji(data.changePercent);
+            const preChange = data.preMarketPrice !== 'N/A' ? ` ${data.preMarketPrice} ${getChangeEmoji(data.preMarketChange)}${data.preMarketChange}` : '';
+            const postChange = data.postMarketPrice !== 'N/A' ? ` ${data.postMarketPrice} ${getChangeEmoji(data.postMarketChange)}${data.postMarketChange}` : '';
+            
+            return `**${data.symbol}** ${data.regularMarketPrice} ${regularEmoji}${data.changePercent}` + 
+                   (data.preMarketPrice !== 'N/A' ? ` / pre:${preChange}` : '') +
+                   (data.postMarketPrice !== 'N/A' ? ` / post:${postChange}` : '');
         })
         .join('\n');
 }
