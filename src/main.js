@@ -24,15 +24,15 @@ async function getTickerPrice(symbol) {
         const previousClose = quote.regularMarketPreviousClose;
         const currentPrice = quote.regularMarketPrice;
         
-        function calculateChange(price) {
-            if (!price || !previousClose) return 'N/A';
-            const change = ((price - previousClose) / previousClose * 100).toFixed(2);
+        function calculateChange(price, basePrice) {
+            if (!price || !basePrice) return 'N/A';
+            const change = ((price - basePrice) / basePrice * 100).toFixed(2);
             return `${Number(change) > 0 ? '+' : ''}${change}%`;
         }
         
-        const regularChange = calculateChange(currentPrice);
-        const preMarketChange = calculateChange(quote.preMarketPrice);
-        const postMarketChange = calculateChange(quote.postMarketPrice);
+        const regularChange = calculateChange(currentPrice, previousClose);
+        const preMarketChange = calculateChange(quote.preMarketPrice, currentPrice);
+        const postMarketChange = calculateChange(quote.postMarketPrice, currentPrice);
         
         const result = {
             symbol: symbol.toUpperCase(),
