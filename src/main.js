@@ -14,7 +14,7 @@ if (!token) {
 const bot = new TelegramBot(token, { polling: true });
 
 // Store last 10 requests
-const requestHistory = [];
+let requestHistory = [];
 const MAX_HISTORY = 10;
 
 async function getTickerPrice(symbol) {
@@ -45,7 +45,14 @@ async function getTickerPrice(symbol) {
             timestamp: new Date().toISOString()
         };
         
+        // Remove previous occurrences of this symbol
+        const symbolUpper = symbol.toUpperCase();
+        requestHistory = requestHistory.filter(item => item.symbol !== symbolUpper);
+        
+        // Add new entry at the beginning
         requestHistory.unshift(result);
+        
+        // Trim to MAX_HISTORY if needed
         if (requestHistory.length > MAX_HISTORY) {
             requestHistory.pop();
         }
