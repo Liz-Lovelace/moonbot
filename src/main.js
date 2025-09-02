@@ -13,8 +13,8 @@ if (!token) {
 
 const bot = new TelegramBot(token, { polling: true });
 
-// Store last 10 requests
-let requestHistory = [];
+// Change from storing objects to storing just symbols
+let tickerHistory = [];
 const MAX_HISTORY = 10;
 
 async function getTickerPrice(symbol) {
@@ -34,7 +34,7 @@ async function getTickerPrice(symbol) {
         const preMarketChange = calculateChange(quote.preMarketPrice, currentPrice);
         const postMarketChange = calculateChange(quote.postMarketPrice, currentPrice);
         
-        const result = {
+        return {
             symbol: symbol.toUpperCase(),
             regularMarketPrice: currentPrice,
             preMarketPrice: quote.preMarketPrice || 'N/A',
@@ -44,20 +44,6 @@ async function getTickerPrice(symbol) {
             postMarketChange: postMarketChange,
             timestamp: new Date().toISOString()
         };
-        
-        // Remove previous occurrences of this symbol
-        const symbolUpper = symbol.toUpperCase();
-        requestHistory = requestHistory.filter(item => item.symbol !== symbolUpper);
-        
-        // Add new entry at the beginning
-        requestHistory.unshift(result);
-        
-        // Trim to MAX_HISTORY if needed
-        if (requestHistory.length > MAX_HISTORY) {
-            requestHistory.pop();
-        }
-        
-        return result;
     } catch (error) {
         console.error(`Error fetching price for ${symbol}:`, error);
         throw error;
@@ -90,23 +76,42 @@ function formatPriceMessage(data) {
     return lines.join('\n');
 }
 
-function formatHistoryMessage() {
-    if (requestHistory.length === 0) {
+async function formatHistoryMessage() {
+    if (tickerHistory.length === 0) {
         return "No requests yet";
     }
     
-    return "Last 10 requests:\n\n" + [...requestHistory]
-        .reverse()
-        .map(data => {
-            const regularEmoji = getChangeEmoji(data.changePercent);
-            const preChange = data.preMarketPrice !== 'N/A' ? ` ${data.preMarketPrice} ${getChangeEmoji(data.preMarketChange)}${data.preMarketChange}` : '';
-            const postChange = data.postMarketPrice !== 'N/A' ? ` ${data.postMarketPrice} ${getChangeEmoji(data.postMarketChange)}${data.postMarketChange}` : '';
-            
-            return `**${data.symbol}** ${data.regularMarketPrice} ${regularEmoji}${data.changePercent}` + 
-                   (data.preMarketPrice !== 'N/A' ? ` / pre:${preChange}` : '') +
-                   (data.postMarketPrice !== 'N/A' ? ` / post:${postChange}` : '');
-        })
-        .join('\n');
+    try {
+        // Fetch fresh data for all tickers in history
+        const results = await Promise.all(
+            tickerHistory.map(symbol => getTickerPrice(symbol))
+        );
+        
+        return "Last 10 requests:\n\n" + results
+            .map(data => {
+                const regularEmoji = getChangeEmoji(data.changePercent);
+                const preChange = data.preMarketPrice !== 'N/A' ? ` ${data.preMarketPrice} ${getChangeEmoji(data.preMarketChange)}${data.preMarketChange}` : '';
+                const postChange = data.postMarketPrice !== 'N/A' ? ` ${data.postMarketPrice} ${getChangeEmoji(data.postMarketChange)}${data.postMarketChange}` : '';
+                
+                return `**${data.symbol}** ${data.regularMarketPrice} ${regularEmoji}${data.changePercent}` + 
+                       (data.preMarketPrice !== 'N/A' ? ` / pre:${preChange}` : '') +
+                       (data.postMarketPrice !== 'N/A' ? ` / post:${postChange}` : '');
+            })
+            .join('\n');
+    } catch (error) {
+        console.error('Error fetching history data:', error);
+        return "Error fetching history data. Please try again.";
+    }
+}
+
+async function addToHistory(symbol) {
+    const symbolUpper = symbol.toUpperCase();
+    tickerHistory = tickerHistory.filter(s => s !== symbolUpper);
+    tickerHistory.unshift(symbolUpper);
+    
+    if (tickerHistory.length > MAX_HISTORY) {
+        tickerHistory.pop();
+    }
 }
 
 bot.on('message', async (msg) => {
@@ -115,12 +120,13 @@ bot.on('message', async (msg) => {
 
     try {
         if (text === '1') {
-            const historyMessage = formatHistoryMessage();
+            const historyMessage = await formatHistoryMessage();
             await bot.sendMessage(chatId, historyMessage, { parse_mode: 'Markdown' });
             return;
         }
 
         const result = await getTickerPrice(text);
+        await addToHistory(text);
         const message = formatPriceMessage(result);
         await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
         
