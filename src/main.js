@@ -1,4 +1,4 @@
-import yahooFinance from 'yahoo-finance2';
+import YahooFinance from 'yahoo-finance2';
 import TelegramBot from 'node-telegram-bot-api';
 import dotenv from 'dotenv';
 
@@ -16,6 +16,8 @@ const bot = new TelegramBot(token, { polling: true });
 // Change from storing objects to storing just symbols
 let tickerHistory = [];
 const MAX_HISTORY = 10;
+
+const yahooFinance = new YahooFinance();
 
 async function getTickerPrice(symbol) {
     try {
@@ -83,6 +85,7 @@ async function formatHistoryMessage() {
     
     try {
         // Fetch fresh data for all tickers in history
+        console.log('formatting history calling getTickerPrice on:', tickerHistory);
         const results = await Promise.all(
             tickerHistory.map(symbol => getTickerPrice(symbol))
         );
@@ -125,6 +128,7 @@ bot.on('message', async (msg) => {
             return;
         }
 
+        console.log('new message, calling getTickerPrice on:', text);
         const result = await getTickerPrice(text);
         await addToHistory(text);
         const message = formatPriceMessage(result);
